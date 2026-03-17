@@ -89,6 +89,10 @@ void HikRobot::capture_start()
   set_float_value("Gain", gain_);
   MV_CC_SetFrameRate(handle_, 150);
 
+  tools::logger()->info(
+    "[HikRobot] Camera params set: ExposureTime={:.0f}us({:.1f}ms) Gain={:.1f}",
+    exposure_us_, exposure_us_ / 1e3, gain_);
+
   ret = MV_CC_StartGrabbing(handle_);
   if (ret != MV_OK) {
     tools::logger()->warn("MV_CC_StartGrabbing failed: {:#x}", ret);
@@ -190,6 +194,22 @@ void HikRobot::set_float_value(const std::string & name, double value)
   if (ret != MV_OK) {
     tools::logger()->warn("MV_CC_SetFloatValue(\"{}\", {}) failed: {:#x}", name, value, ret);
     return;
+  }
+}
+
+void HikRobot::update_params(double exposure_ms, double gain)
+{
+  double new_exposure_us = exposure_ms * 1e3;
+  if (new_exposure_us != exposure_us_ || gain != gain_) {
+    exposure_us_ = new_exposure_us;
+    gain_ = gain;
+    if (capturing_) {
+      set_float_value("ExposureTime", exposure_us_);
+      set_float_value("Gain", gain_);
+      tools::logger()->info(
+        "[HikRobot] Params updated: ExposureTime={:.0f}us({:.1f}ms) Gain={:.1f}",
+        exposure_us_, exposure_us_ / 1e3, gain_);
+    }
   }
 }
 

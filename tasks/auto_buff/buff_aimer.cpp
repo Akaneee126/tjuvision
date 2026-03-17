@@ -9,12 +9,20 @@ namespace auto_buff
 Aimer::Aimer(const std::string & config_path)
 {
   auto yaml = YAML::LoadFile(config_path);
+  reload(yaml);
+
+  last_fire_t_ = std::chrono::steady_clock::now();
+}
+
+void Aimer::reload(const YAML::Node & yaml)
+{
   yaw_offset_ = yaml["yaw_offset"].as<double>() / 57.3;      // degree to rad
   pitch_offset_ = yaml["pitch_offset"].as<double>() / 57.3;  // degree to rad
   fire_gap_time_ = yaml["fire_gap_time"].as<double>();
   predict_time_ = yaml["predict_time"].as<double>();
-
-  last_fire_t_ = std::chrono::steady_clock::now();
+  tools::logger()->info(
+    "[BuffAimer] yaw_offset={:.2f}deg pitch_offset={:.2f}deg fire_gap={:.3f}s predict_time={:.3f}s",
+    yaw_offset_ * 57.3, pitch_offset_ * 57.3, fire_gap_time_, predict_time_);
 }
 
 io::Command Aimer::aim(

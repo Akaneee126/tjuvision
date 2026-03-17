@@ -1,6 +1,8 @@
 #ifndef AUTO_AIM__AIMER_HPP
 #define AUTO_AIM__AIMER_HPP
 
+#include <yaml-cpp/yaml.h>
+
 #include <Eigen/Dense>
 #include <chrono>
 #include <list>
@@ -30,6 +32,9 @@ public:
   io::Command aim(
     std::list<Target> targets, std::chrono::steady_clock::time_point timestamp, double bullet_speed,
     io::ShootMode shoot_mode, bool to_now = true);
+
+  /// @brief 热重载偏置参数（从YAML节点）
+  void reload(const YAML::Node & yaml);
 
 private:
   double yaw_offset_;

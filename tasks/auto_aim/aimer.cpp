@@ -3,6 +3,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cmath>
+#include <filesystem>
 #include <vector>
 
 #include "tools/logger.hpp"
@@ -15,6 +16,12 @@ Aimer::Aimer(const std::string & config_path)
 : left_yaw_offset_(std::nullopt), right_yaw_offset_(std::nullopt)
 {
   auto yaml = YAML::LoadFile(config_path);
+  reload(yaml);
+  tools::logger()->info("[Aimer] Config loaded from: {}", std::filesystem::absolute(config_path).string());
+}
+
+void Aimer::reload(const YAML::Node & yaml)
+{
   yaw_offset_ = yaml["yaw_offset"].as<double>() / 57.3;        // degree to rad
   pitch_offset_ = yaml["pitch_offset"].as<double>() / 57.3;    // degree to rad
   comming_angle_ = yaml["comming_angle"].as<double>() / 57.3;  // degree to rad
@@ -25,7 +32,16 @@ Aimer::Aimer(const std::string & config_path)
   if (yaml["left_yaw_offset"].IsDefined() && yaml["right_yaw_offset"].IsDefined()) {
     left_yaw_offset_ = yaml["left_yaw_offset"].as<double>() / 57.3;    // degree to rad
     right_yaw_offset_ = yaml["right_yaw_offset"].as<double>() / 57.3;  // degree to rad
-    tools::logger()->info("[Aimer] successfully loading shootmode");
+  }
+  tools::logger()->info(
+    "[Aimer] yaw_offset={:.2f}deg pitch_offset={:.2f}deg comming_angle={:.1f}deg "
+    "leaving_angle={:.1f}deg decision_speed={:.2f}rad/s",
+    yaw_offset_ * 57.3, pitch_offset_ * 57.3, comming_angle_ * 57.3,
+    leaving_angle_ * 57.3, decision_speed_);
+  if (left_yaw_offset_.has_value()) {
+    tools::logger()->info(
+      "[Aimer] left_yaw_offset={:.2f}deg right_yaw_offset={:.2f}deg",
+      left_yaw_offset_.value() * 57.3, right_yaw_offset_.value() * 57.3);
   }
 }
 

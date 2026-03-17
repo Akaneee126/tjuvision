@@ -83,7 +83,7 @@ public:
 
 private:
   serial::Serial serial_;
-
+  std::mutex serial_mutex_; // <--- 【新增】请务必加上这一行！用于保护串口读写安全
   std::thread thread_;
   std::atomic<bool> quit_ = false;
   mutable std::mutex mutex_;

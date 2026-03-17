@@ -21,6 +21,7 @@
 #include "tools/math_tools.hpp"
 #include "tools/plotter.hpp"
 #include "tools/recorder.hpp"
+#include "tools/config_reloader.hpp"
 
 const std::string keys =
   "{help h usage ? | | 输出命令行参数说明}"
@@ -56,6 +57,14 @@ int main(int argc, char * argv[])
   auto_buff::BigTarget buff_big_target;
   auto_buff::Aimer buff_aimer(config_path);
 
+  // 配置热重载器
+  tools::ConfigReloader reloader(config_path);
+  reloader.add_callback([&](const YAML::Node & yaml) {
+    aimer.reload(yaml);
+    buff_aimer.reload(yaml);
+    camera.reload(yaml);
+  });
+
   auto_aim::multithread::CommandGener commandgener(shooter, aimer, cboard, plotter);
 
   std::atomic<io::Mode> mode{io::Mode::idle};
@@ -84,6 +93,16 @@ int main(int argc, char * argv[])
 
     /// 自瞄
     if (mode.load() == io::Mode::auto_aim) {
+      static int fps_count = 0;
+      static auto last_time = std::chrono::steady_clock::now();
+      fps_count++;
+      auto now_time = std::chrono::steady_clock::now();
+      // 每隔 1 秒打印一次 FPS
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(now_time - last_time).count() >= 1000) {
+          tools::logger()->info("Algorithm FPS: {}", fps_count);
+          fps_count = 0;
+          last_time = now_time;
+      }
       auto [img, armors, t] = detector.debug_pop();
       Eigen::Quaterniond q = cboard.imu_at(t - 1ms);
 
@@ -130,6 +149,9 @@ int main(int argc, char * argv[])
 
     } else
       continue;
+
+    // 自动检测YAML文件变化并重载参数
+    reloader.check();
   }
 
   detect_thread.join();

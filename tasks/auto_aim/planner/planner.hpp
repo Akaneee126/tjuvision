@@ -1,6 +1,8 @@
 #ifndef AUTO_AIM__PLANNER_HPP
 #define AUTO_AIM__PLANNER_HPP
 
+#include <yaml-cpp/yaml.h>
+
 #include <Eigen/Dense>
 #include <list>
 #include <optional>
@@ -18,16 +20,16 @@ using Trajectory = Eigen::Matrix<double, 4, HORIZON>;  // yaw, yaw_vel, pitch, p
 
 struct Plan
 {
-  bool control;
-  bool fire;
-  float target_yaw;
-  float target_pitch;
-  float yaw;
-  float yaw_vel;
-  float yaw_acc;
-  float pitch;
-  float pitch_vel;
-  float pitch_acc;
+  bool control = false;
+  bool fire = false;
+  float target_yaw = 0.0f;
+  float target_pitch = 0.0f;
+  float yaw = 0.0f;
+  float yaw_vel = 0.0f;
+  float yaw_acc = 0.0f;
+  float pitch = 0.0f;
+  float pitch_vel = 0.0f;
+  float pitch_acc = 0.0f;
 };
 
 class Planner
@@ -38,6 +40,9 @@ public:
 
   Plan plan(Target target, double bullet_speed);
   Plan plan(std::optional<Target> target, double bullet_speed);
+
+  /// @brief 热重载偏置参数（从YAML节点）
+  void reload(const YAML::Node & yaml);
 
 private:
   double yaw_offset_;

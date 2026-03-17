@@ -1,5 +1,6 @@
 #include "planner.hpp"
 
+#include <filesystem>
 #include <vector>
 
 #include "tools/math_tools.hpp"
@@ -13,15 +14,26 @@ namespace auto_aim
 Planner::Planner(const std::string & config_path)
 {
   auto yaml = tools::load(config_path);
+  reload(yaml);
+  tools::logger()->info("[Planner] Config loaded from: {}",
+    std::filesystem::absolute(config_path).string());
+
+  setup_yaw_solver(config_path);
+  setup_pitch_solver(config_path);
+}
+
+void Planner::reload(const YAML::Node & yaml)
+{
   yaw_offset_ = tools::read<double>(yaml, "yaw_offset") / 57.3;
   pitch_offset_ = tools::read<double>(yaml, "pitch_offset") / 57.3;
   fire_thresh_ = tools::read<double>(yaml, "fire_thresh");
   decision_speed_ = tools::read<double>(yaml, "decision_speed");
   high_speed_delay_time_ = tools::read<double>(yaml, "high_speed_delay_time");
   low_speed_delay_time_ = tools::read<double>(yaml, "low_speed_delay_time");
-
-  setup_yaw_solver(config_path);
-  setup_pitch_solver(config_path);
+  tools::logger()->info(
+    "[Planner] yaw_offset={:.2f}deg pitch_offset={:.2f}deg fire_thresh={:.4f} "
+    "decision_speed={:.2f}rad/s",
+    yaw_offset_ * 57.3, pitch_offset_ * 57.3, fire_thresh_, decision_speed_);
 }
 
 Plan Planner::plan(Target target, double bullet_speed)

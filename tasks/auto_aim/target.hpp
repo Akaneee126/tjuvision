@@ -26,7 +26,7 @@ public:
   Target() = default;
   Target(
     const Armor & armor, std::chrono::steady_clock::time_point t, double radius, int armor_num,
-    Eigen::VectorXd P0_dig);
+    Eigen::VectorXd P0_dig, double v1 = 100, double v2 = 400);
   Target(double x, double vyaw, double radius, double h);
 
   void predict(std::chrono::steady_clock::time_point t);
@@ -51,6 +51,9 @@ private:
   int update_count_;
 
   bool is_switch_, is_converged_;
+
+  double v1_;  // 加速度方差
+  double v2_;  // 角加速度方差
 
   tools::ExtendedKalmanFilter ekf_;
   std::chrono::steady_clock::time_point t_;

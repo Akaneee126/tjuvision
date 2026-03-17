@@ -18,6 +18,7 @@
 #include "tools/math_tools.hpp"
 #include "tools/plotter.hpp"
 #include "tools/recorder.hpp"
+#include "tools/config_reloader.hpp"
 
 using namespace std::chrono;
 
@@ -46,6 +47,13 @@ int main(int argc, char * argv[])
   auto_aim::Tracker tracker(config_path, solver);
   auto_aim::Aimer aimer(config_path);
   auto_aim::Shooter shooter(config_path);
+
+  // 配置热重载器
+  tools::ConfigReloader reloader(config_path);
+  reloader.add_callback([&](const YAML::Node & yaml) {
+    aimer.reload(yaml);
+    camera.reload(yaml);
+  });
 
   cv::Mat img;
   Eigen::Quaterniond q;
@@ -77,6 +85,9 @@ int main(int argc, char * argv[])
     auto command = aimer.aim(targets, t, cboard.bullet_speed);
 
     cboard.send(command);
+
+    // 自动检测YAML文件变化并重载参数
+    reloader.check();
   }
 
   return 0;

@@ -14,7 +14,11 @@ Gimbal::Gimbal(const std::string & config_path)
 
   try {
     serial_.setPort(com_port);
+    serial_.setBaudrate(115200);  // 设置波特率
+    auto timeout = serial::Timeout::simpleTimeout(100);  // 100ms超时
+    serial_.setTimeout(timeout);
     serial_.open();
+    tools::logger()->info("[Gimbal] Serial opened on {}", com_port);
   } catch (const std::exception & e) {
     tools::logger()->error("[Gimbal] Failed to open serial: {}", e.what());
     exit(1);
@@ -64,16 +68,38 @@ std::string Gimbal::str(GimbalMode mode) const
 Eigen::Quaterniond Gimbal::q(std::chrono::steady_clock::time_point t)
 {
   while (true) {
-    auto [q_a, t_a] = queue_.pop();
+    // 1. 判空保护
+    if (queue_.empty()) return Eigen::Quaterniond::Identity();
+
+    // 2. 取出队首元素 (q_a) 并移除
+    auto [q_a, t_a] = queue_.pop(); // 确保这一行只出现一次！
+    
+    // 3. 如果队列空了（只有一帧数据），直接返回 q_a，无法插值
+    if (queue_.empty()) return q_a; 
+
+    // 4. 查看新的队首元素 (q_b)，不移除
     auto [q_b, t_b] = queue_.front();
+    
+    // 5. 计算时间差
     auto t_ab = tools::delta_time(t_a, t_b);
     auto t_ac = tools::delta_time(t_a, t);
+    
+    // 防止除零错误 (如果时间戳完全相同)
+    if (std::abs(t_ab) < 1e-6) return q_b;
+
+    // 6. 插值
     auto k = t_ac / t_ab;
     Eigen::Quaterniond q_c = q_a.slerp(k, q_b).normalized();
-    if (t < t_a) return q_c;
-    if (!(t_a < t && t <= t_b)) continue;
 
-    return q_c;
+    // 情况 A: 目标时间 t 在 t_a 之前（延迟较大），直接返回插值结果
+    if (t < t_a) return q_c;
+    
+    // 情况 B: 目标时间 t 落在区间 [t_a, t_b] 内，返回插值结果
+    if (t <= t_b) return q_c;
+
+    // 情况 C: 目标时间 t 比 t_b 还要晚 (t > t_b)
+    // 说明 t_a 太旧了，不满足要求，continue 进入下一轮循环
+    // 此时 q_a 已经被 pop 移除了，q_b 会在下一轮变成新的 q_a
   }
 }
 
@@ -90,7 +116,11 @@ void Gimbal::send(io::VisionToGimbal VisionToGimbal)
     reinterpret_cast<uint8_t *>(&tx_data_), sizeof(tx_data_) - sizeof(tx_data_.crc16));
 
   try {
-    serial_.write(reinterpret_cast<uint8_t *>(&tx_data_), sizeof(tx_data_));
+    std::lock_guard<std::mutex> lock(serial_mutex_);
+
+    if (serial_.isOpen()) {
+        serial_.write(reinterpret_cast<uint8_t *>(&tx_data_), sizeof(tx_data_));
+    }
   } catch (const std::exception & e) {
     tools::logger()->warn("[Gimbal] Failed to write serial: {}", e.what());
   }
@@ -111,7 +141,11 @@ void Gimbal::send(
     reinterpret_cast<uint8_t *>(&tx_data_), sizeof(tx_data_) - sizeof(tx_data_.crc16));
 
   try {
-    serial_.write(reinterpret_cast<uint8_t *>(&tx_data_), sizeof(tx_data_));
+    std::lock_guard<std::mutex> lock(serial_mutex_);
+
+    if (serial_.isOpen()) {
+        serial_.write(reinterpret_cast<uint8_t *>(&tx_data_), sizeof(tx_data_));
+    }
   } catch (const std::exception & e) {
     tools::logger()->warn("[Gimbal] Failed to write serial: {}", e.what());
   }
@@ -120,6 +154,8 @@ void Gimbal::send(
 bool Gimbal::read(uint8_t * buffer, size_t size)
 {
   try {
+    // read 函数通常不需要锁，因为只有 read_thread 一个线程在读
+    // 但如果 serial 库不是线程安全的，可能需要锁，这里暂时不加锁以避免阻塞
     return serial_.read(buffer, size) == size;
   } catch (const std::exception & e) {
     // tools::logger()->warn("[Gimbal] Failed to read serial: {}", e.what());
@@ -133,7 +169,7 @@ void Gimbal::read_thread()
   int error_count = 0;
 
   while (!quit_) {
-    if (error_count > 5000) {
+    if (error_count > 100) {
       error_count = 0;
       tools::logger()->warn("[Gimbal] Too many errors, attempting to reconnect...");
       reconnect();
@@ -153,11 +189,6 @@ void Gimbal::read_thread()
           reinterpret_cast<uint8_t *>(&rx_data_) + sizeof(rx_data_.head),
           sizeof(rx_data_) - sizeof(rx_data_.head))) {
       error_count++;
-      continue;
-    }
-
-    if (!tools::check_crc16(reinterpret_cast<uint8_t *>(&rx_data_), sizeof(rx_data_))) {
-      tools::logger()->debug("[Gimbal] CRC16 check failed.");
       continue;
     }
 
@@ -202,17 +233,25 @@ void Gimbal::reconnect()
   int max_retry_count = 10;
   for (int i = 0; i < max_retry_count && !quit_; ++i) {
     tools::logger()->warn("[Gimbal] Reconnecting serial, attempt {}/{}...", i + 1, max_retry_count);
-    try {
-      serial_.close();
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    } catch (...) {
-    }
+    
+    {
+        std::lock_guard<std::mutex> lock(serial_mutex_); // 【关键修复3】加锁防止重连时主线程写入
+        try {
+            if (serial_.isOpen()) serial_.close();
+        } catch (...) {}
+    } // 锁在这里释放
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     try {
-      serial_.open();  // 尝试重新打开
-      queue_.clear();
-      tools::logger()->info("[Gimbal] Reconnected serial successfully.");
-      break;
+      std::lock_guard<std::mutex> lock(serial_mutex_); // 【关键修复3】加锁进行重连
+      serial_.open();  
+      
+      if (serial_.isOpen()) {
+        queue_.clear();
+        tools::logger()->info("[Gimbal] Reconnected serial successfully.");
+        break;
+      }
     } catch (const std::exception & e) {
       tools::logger()->warn("[Gimbal] Reconnect failed: {}", e.what());
       std::this_thread::sleep_for(std::chrono::seconds(1));

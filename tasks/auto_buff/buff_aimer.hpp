@@ -29,6 +29,9 @@ public:
     Target & target, std::chrono::steady_clock::time_point & timestamp, io::GimbalState gs,
     bool to_now = true);
 
+  /// @brief 热重载偏置参数
+  void reload(const YAML::Node & yaml);
+
   double angle;      ///
   double t_gap = 0;  ///
 

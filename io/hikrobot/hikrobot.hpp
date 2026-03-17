@@ -20,6 +20,9 @@ public:
   ~HikRobot() override;
   void read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp) override;
 
+  /// @brief 运行时更新曝光和增益参数
+  void update_params(double exposure_ms, double gain);
+
 private:
   struct CameraData
   {

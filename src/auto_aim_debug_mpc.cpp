@@ -18,6 +18,7 @@
 #include "tools/math_tools.hpp"
 #include "tools/plotter.hpp"
 #include "tools/thread_safe_queue.hpp"
+#include "tools/config_reloader.hpp"
 
 using namespace std::chrono_literals;
 
@@ -44,6 +45,13 @@ int main(int argc, char * argv[])
   auto_aim::Solver solver(config_path);
   auto_aim::Tracker tracker(config_path, solver);
   auto_aim::Planner planner(config_path);
+
+  // 配置热重载器
+  tools::ConfigReloader reloader(config_path);
+  reloader.add_callback([&](const YAML::Node & yaml) {
+    planner.reload(yaml);
+    camera.reload(yaml);
+  });
 
   tools::ThreadSafeQueue<std::optional<auto_aim::Target>, true> target_queue(1);
   target_queue.push(std::nullopt);
@@ -140,6 +148,11 @@ int main(int argc, char * argv[])
     cv::imshow("reprojection", img);
     auto key = cv::waitKey(1);
     if (key == 'q') break;
+    if (key == 'r') {
+      tools::logger()->info("[Manual] Force reloading config...");
+      reloader.force_reload();
+    }
+    reloader.check();
   }
 
   quit = true;

@@ -1,4 +1,3 @@
-
 #include <fmt/core.h>
 #include <yaml-cpp/yaml.h>
 
@@ -14,6 +13,9 @@
 #include "tools/exiter.hpp"
 #include "tools/img_tools.hpp"
 #include "tools/logger.hpp"
+
+// 【关键修改】添加命名空间引用，才能使用 1ms 这种写法
+using namespace std::chrono_literals;
 
 const std::string keys =
   "{help h usage ? |                     | 输出命令行参数说明}"
@@ -55,6 +57,7 @@ int main(int argc, char * argv[])
   }
   while (!exiter.exit()) {
     camera.read(img, t);
+    // 现在这里可以正常编译了
     q = cboard.imu_at(t - 1ms * delay);
     solver.set_R_gimbal2world(q);
     cv::Mat result = img.clone();
